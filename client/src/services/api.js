@@ -23,7 +23,7 @@ async function request(path, options = {}) {
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
-  if (res.status === 401) {
+  if (res.status === 401 && !path.startsWith('/auth/')) {
     clearToken();
     window.location.reload();
     throw new Error('Session expired');

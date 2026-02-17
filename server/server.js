@@ -53,9 +53,40 @@ app.use((req, res) => {
 // Global error handler (must be last)
 app.use(errorHandler);
 
+// Seed demo accounts on startup
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
+const db = require('./config/db');
+
+async function seedDemoAccounts() {
+  const demos = [
+    { username: 'alice', email: 'alice@demo.com', password: 'DemoPass1' },
+    { username: 'bob', email: 'bob@demo.com', password: 'DemoPass1' },
+    { username: 'charlie', email: 'charlie@demo.com', password: 'DemoPass1' },
+  ];
+
+  for (const demo of demos) {
+    const exists = [...db.users.values()].find(u => u.email === demo.email);
+    if (exists) continue;
+
+    const id = `usr_${uuidv4().slice(0, 8)}`;
+    const hashedPassword = await bcrypt.hash(demo.password, 10);
+    db.users.set(id, {
+      id,
+      username: demo.username,
+      email: demo.email,
+      password: hashedPassword,
+      walletBalance: 1.0,
+      createdAt: new Date().toISOString(),
+    });
+  }
+  logger.info('server', 'Demo accounts seeded (alice, bob, charlie)');
+}
+
 // Start server
 const PORT = process.env.PORT || 3001;
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
+  await seedDemoAccounts();
   logger.info('server', `Escrow API running on http://localhost:${PORT}`);
 });
 
