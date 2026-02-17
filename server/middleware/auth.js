@@ -36,13 +36,13 @@ function generateTokens(user) {
   const refreshJti = uuidv4();
 
   const accessToken = jwt.sign(
-    { id: user.id, username: user.username, email: user.email, jti: accessJti },
+    { id: user.id, username: user.username, email: user.email, role: user.role || 'user', jti: accessJti },
     JWT_SECRET,
     { expiresIn: '1h' }
   );
 
   const refreshToken = jwt.sign(
-    { id: user.id, username: user.username, email: user.email, jti: refreshJti, type: 'refresh' },
+    { id: user.id, username: user.username, email: user.email, role: user.role || 'user', jti: refreshJti, type: 'refresh' },
     JWT_SECRET,
     { expiresIn: '7d' }
   );

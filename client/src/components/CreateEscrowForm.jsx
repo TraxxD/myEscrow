@@ -6,6 +6,15 @@ import Input from "./Input";
 import Button from "./Button";
 import * as Icons from "./Icons";
 
+const CATEGORIES = [
+  { id: "domains", label: "Domain Names" },
+  { id: "vehicles", label: "Vehicles" },
+  { id: "electronics", label: "Electronics" },
+  { id: "merchandise", label: "Merchandise" },
+  { id: "services", label: "Services" },
+  { id: "crypto", label: "Crypto" },
+];
+
 export default function CreateEscrowForm({
   currentUser,
   onSubmit,
@@ -19,6 +28,10 @@ export default function CreateEscrowForm({
   const [amount, setAmount] = useState("");
   const [seller, setSeller] = useState("");
   const [days, setDays] = useState("14");
+  const [category, setCategory] = useState(
+    CATEGORIES.find((c) => c.label === initialCategory)?.id || ""
+  );
+  const [inspectionDays, setInspectionDays] = useState("3");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -27,7 +40,7 @@ export default function CreateEscrowForm({
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({ title, description, amount, seller, days });
+      await onSubmit({ title, description, amount, seller, days, category, inspectionDays });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -108,10 +121,48 @@ export default function CreateEscrowForm({
             textarea
           />
 
+          {/* Category selector */}
+          <div>
+            <label
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: palette.textMuted,
+                letterSpacing: "0.5px",
+                display: "block",
+                marginBottom: 6,
+              }}
+            >
+              CATEGORY
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setCategory(category === cat.id ? "" : cat.id)}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    border: `1px solid ${category === cat.id ? palette.accent : palette.border}`,
+                    background: category === cat.id ? palette.accent + "14" : "transparent",
+                    color: category === cat.id ? palette.accent : palette.textMuted,
+                    cursor: "pointer",
+                    fontFamily: "'Outfit', sans-serif",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    transition: "all 0.2s",
+                  }}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "1fr 1fr 1fr",
               gap: 16,
             }}
           >
@@ -128,6 +179,14 @@ export default function CreateEscrowForm({
               value={days}
               onChange={setDays}
               placeholder="14"
+              type="number"
+              mono
+            />
+            <Input
+              label="INSPECTION (DAYS)"
+              value={inspectionDays}
+              onChange={setInspectionDays}
+              placeholder="3"
               type="number"
               mono
             />
@@ -216,6 +275,15 @@ export default function CreateEscrowForm({
                 >
                   {formatBTC(parseFloat(amount) * 0.98)}
                 </span>
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: palette.textDim,
+                }}
+              >
+                Inspection: {inspectionDays || 3} day{parseInt(inspectionDays) !== 1 ? "s" : ""} after delivery
               </div>
             </div>
           )}

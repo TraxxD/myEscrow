@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import palette from "../styles/palette";
+import * as api from "../services/api";
 import * as Icons from "./Icons";
 import Button from "./Button";
 import Input from "./Input";
@@ -10,6 +11,7 @@ const DEMO_ACCOUNTS = [
   { username: "alice", email: "alice@demo.com", password: "DemoPass1" },
   { username: "bob", email: "bob@demo.com", password: "DemoPass1" },
   { username: "charlie", email: "charlie@demo.com", password: "DemoPass1" },
+  { username: "admin", email: "admin@demo.com", password: "AdminPass1", isAdmin: true },
 ];
 
 const CATEGORIES = [
@@ -93,6 +95,10 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
   const [localError, setLocalError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [category, setCategory] = useState(null);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotBusy, setForgotBusy] = useState(false);
 
   const width = useWindowWidth();
   const isMobile = width < 640;
@@ -349,9 +355,67 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
               animationDelay: "0.2s",
             }}
           >
-            Trade directly with anyone, anywhere. Our escrow holds funds safely
-            until both parties are satisfied — no middlemen, no surprises.
+            Trade directly with anyone, anywhere. 2-of-3 multisig Bitcoin escrow
+            holds funds on-chain until both parties are satisfied — trustless, transparent, verifiable.
           </p>
+        </div>
+      </section>
+
+      {/* ── Blockchain Banner ── */}
+      <section
+        style={{
+          padding: isMobile ? "0 20px 40px" : "0 40px 60px",
+          maxWidth: 1100,
+          margin: "0 auto",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
+            gap: 12,
+          }}
+        >
+          {[
+            { label: "NETWORK", value: "Bitcoin Testnet", color: palette.accent },
+            { label: "ESCROW TYPE", value: "2-of-3 P2SH Multisig", color: palette.green },
+            { label: "KEY DERIVATION", value: "BIP32 / BIP39 HD", color: palette.blue },
+            { label: "MONITORING", value: "mempool.space API", color: palette.purple },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                padding: "14px 18px",
+                borderRadius: 12,
+                background: palette.surface,
+                border: `1px solid ${palette.border}`,
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: palette.textDim,
+                  letterSpacing: "1px",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  marginBottom: 6,
+                }}
+              >
+                {item.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: item.color,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                {item.value}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -493,9 +557,9 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
               }}
             >
               {[
-                "256-bit Security",
-                "Instant Setup",
-                "Zero Fees",
+                "2-of-3 Multisig",
+                "Bitcoin Testnet",
+                "On-Chain Escrow",
               ].map((t) => (
                 <span
                   key={t}
@@ -627,8 +691,96 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
                     "Create Account"
                   )}
                 </Button>
+                {mode === "login" && (
+                  <button
+                    type="button"
+                    onClick={() => { setForgotMode(true); setForgotSent(false); setLocalError(null); }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: palette.accent,
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontFamily: "'Outfit', sans-serif",
+                      padding: "4px 0",
+                      textAlign: "center",
+                      width: "100%",
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                )}
               </div>
             </form>
+
+            {/* Forgot password modal */}
+            {forgotMode && (
+              <div
+                style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  background: palette.bg,
+                  border: `1px solid ${palette.border}`,
+                  marginBottom: 20,
+                  animation: "fadeUp 0.3s ease both",
+                }}
+              >
+                {forgotSent ? (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>{"\u2709\ufe0f"}</div>
+                    <p style={{ fontSize: 14, color: palette.text, fontWeight: 600, marginBottom: 4 }}>
+                      Check your email
+                    </p>
+                    <p style={{ fontSize: 12, color: palette.textMuted, marginBottom: 12 }}>
+                      If an account exists for {forgotEmail}, a reset link has been sent.
+                    </p>
+                    <button
+                      onClick={() => { setForgotMode(false); setForgotEmail(""); }}
+                      style={{ background: "none", border: "none", color: palette.accent, cursor: "pointer", fontSize: 12, fontFamily: "'Outfit', sans-serif" }}
+                    >
+                      Back to sign in
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: palette.text, marginBottom: 8 }}>
+                      Reset Password
+                    </p>
+                    <Input
+                      label="EMAIL"
+                      value={forgotEmail}
+                      onChange={setForgotEmail}
+                      placeholder="Enter your account email"
+                    />
+                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                      <button
+                        onClick={() => setForgotMode(false)}
+                        style={{ background: "none", border: "none", color: palette.textMuted, cursor: "pointer", fontSize: 12, fontFamily: "'Outfit', sans-serif" }}
+                      >
+                        Cancel
+                      </button>
+                      <Button
+                        size="sm"
+                        disabled={!forgotEmail || forgotBusy}
+                        onClick={async () => {
+                          setForgotBusy(true);
+                          try {
+                            await api.forgotPassword(forgotEmail);
+                            setForgotSent(true);
+                          } catch {
+                            setForgotSent(true); // Don't reveal if email exists
+                          } finally {
+                            setForgotBusy(false);
+                          }
+                        }}
+                      >
+                        {forgotBusy ? "Sending..." : "Send Reset Link"}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Divider */}
             <div
@@ -676,8 +828,8 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
                     justifyContent: "space-between",
                     padding: "12px 18px",
                     borderRadius: 10,
-                    background: palette.bg,
-                    border: `1px solid ${palette.border}`,
+                    background: acc.isAdmin ? palette.red + "08" : palette.bg,
+                    border: `1px solid ${acc.isAdmin ? palette.red + "33" : palette.border}`,
                     color: palette.text,
                     cursor: isLoading ? "wait" : "pointer",
                     fontFamily: "'Outfit', sans-serif",
@@ -688,12 +840,12 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
                   }}
                   onMouseEnter={(e) => {
                     if (!isLoading) {
-                      e.currentTarget.style.borderColor = palette.accent;
+                      e.currentTarget.style.borderColor = acc.isAdmin ? palette.red : palette.accent;
                       e.currentTarget.style.transform = "translateX(4px)";
                     }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = palette.border;
+                    e.currentTarget.style.borderColor = acc.isAdmin ? palette.red + "33" : palette.border;
                     e.currentTarget.style.transform = "none";
                   }}
                 >
@@ -709,8 +861,8 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
                         width: 28,
                         height: 28,
                         borderRadius: "50%",
-                        background: palette.accent + "18",
-                        color: palette.accent,
+                        background: acc.isAdmin ? palette.red + "18" : palette.accent + "18",
+                        color: acc.isAdmin ? palette.red : palette.accent,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -722,6 +874,21 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
                       {acc.username[0].toUpperCase()}
                     </span>
                     {acc.username}
+                    {acc.isAdmin && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          background: palette.red + "18",
+                          color: palette.red,
+                          fontWeight: 700,
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        ADMIN
+                      </span>
+                    )}
                   </span>
                   {!isMobile && (
                     <span
@@ -785,22 +952,22 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
             {
               icon: <Icons.Plus />,
               color: palette.accent,
-              title: "Create an Escrow",
-              desc: "Buyer creates a deal with the terms, amount, and counterparty. Both sides agree before any funds move.",
+              title: "Agree & Create",
+              desc: "Buyer and seller both agree to terms, amount, and inspection period. A unique 2-of-3 P2SH multisig address is generated on Bitcoin testnet.",
               step: "01",
             },
             {
-              icon: <Icons.Wallet />,
+              icon: <Icons.Lock />,
               color: palette.blue,
-              title: "Fund the Deal",
-              desc: "Buyer deposits Bitcoin into the secure escrow wallet. Funds are locked until the deal conditions are met.",
+              title: "Fund On-Chain",
+              desc: "Buyer sends BTC to the multisig escrow address. Deposits are monitored on-chain and auto-confirmed when the transaction is mined.",
               step: "02",
             },
             {
               icon: <Icons.Check />,
               color: palette.green,
-              title: "Release Payment",
-              desc: "Once the buyer confirms delivery, funds are released to the seller instantly. Disputes are handled fairly.",
+              title: "Inspect & Release",
+              desc: "Seller ships, buyer inspects during the inspection window. Accept releases funds instantly. Reject triggers a return flow. Disputes go to admin arbitration.",
               step: "03",
             },
           ].map((item) => (
@@ -904,28 +1071,28 @@ export default function LoginScreen({ onLogin, onDemoLogin, onCategorySelect, lo
           >
             {[
               {
-                icon: <Icons.Shield />,
+                icon: <Icons.Lock />,
                 color: palette.green,
-                title: "Escrow Protection",
-                desc: "Funds are held securely in escrow until both parties confirm the deal is complete. No one can access them prematurely.",
+                title: "2-of-3 Multisig",
+                desc: "Every escrow generates a unique P2SH address requiring 2-of-3 signatures (buyer, seller, platform). No single party can move funds alone.",
+              },
+              {
+                icon: <Icons.Shield />,
+                color: palette.accent,
+                title: "On-Chain Verification",
+                desc: "All deposits are tracked on Bitcoin testnet via mempool.space. Confirmations are monitored automatically — fully transparent and verifiable.",
               },
               {
                 icon: <Icons.AlertTriangle />,
                 color: palette.purple,
-                title: "Dispute Resolution",
-                desc: "If something goes wrong, our resolution process ensures a fair outcome for both buyers and sellers.",
+                title: "Dispute Arbitration",
+                desc: "If issues arise, the platform acts as the third key holder to arbitrate. Admin reviews evidence and resolves disputes with split percentages.",
               },
               {
                 icon: <Icons.Clock />,
                 color: palette.blue,
-                title: "Instant Settlement",
-                desc: "Once confirmed, payments are released immediately. No waiting periods, no delays — just fast, reliable transfers.",
-              },
-              {
-                icon: <Icons.Lock />,
-                color: palette.accent,
-                title: "Full Transparency",
-                desc: "Every transaction is tracked and visible. Both parties can verify the deal status at any time.",
+                title: "Inspection Period",
+                desc: "Buyers get a configurable inspection window (1-30 days) after delivery. Auto-accept triggers if no action is taken — just like escrow.com.",
               },
             ].map((item) => (
               <Card

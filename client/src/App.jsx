@@ -7,6 +7,8 @@ import LoginScreen from "./components/LoginScreen";
 import Dashboard from "./components/Dashboard";
 import CreateEscrowForm from "./components/CreateEscrowForm";
 import EscrowDetail from "./components/EscrowDetail";
+import AdminPanel from "./components/AdminPanel";
+import WalletPanel from "./components/WalletPanel";
 import Button from "./components/Button";
 import * as Icons from "./components/Icons";
 
@@ -61,6 +63,8 @@ export default function App() {
         amount: parseFloat(formData.amount),
         sellerUsername: formData.seller,
         expiresInDays: parseInt(formData.days) || 14,
+        category: formData.category || undefined,
+        inspectionDays: parseInt(formData.inspectionDays) || 3,
       });
       setEscrows((prev) => [newEscrow, ...prev]);
       setView("dashboard");
@@ -76,15 +80,33 @@ export default function App() {
       try {
         let updated;
         switch (action) {
+          case "agree":
+            updated = await api.agreeEscrow(selectedEscrow.id);
+            showNotification("You agreed to the escrow terms!");
+            break;
           case "fund":
             updated = await api.fundEscrow(selectedEscrow.id);
             showNotification(
               `${formatBTC(selectedEscrow.amount)} deposited into escrow`
             );
             break;
+          case "ship":
+            updated = await api.shipEscrow(selectedEscrow.id, data);
+            showNotification("Item shipped! Tracking info recorded.");
+            break;
           case "deliver":
             updated = await api.deliverEscrow(selectedEscrow.id, data);
             showNotification("Marked as delivered!");
+            break;
+          case "receive":
+            updated = await api.receiveEscrow(selectedEscrow.id);
+            showNotification("Marked as received! Inspection period started.");
+            break;
+          case "accept":
+            updated = await api.acceptEscrow(selectedEscrow.id);
+            showNotification(
+              `${formatBTC(selectedEscrow.amount * 0.98)} released to ${selectedEscrow.seller}!`
+            );
             break;
           case "release":
             updated = await api.releaseEscrow(selectedEscrow.id);
@@ -92,9 +114,23 @@ export default function App() {
               `${formatBTC(selectedEscrow.amount * 0.98)} released to ${selectedEscrow.seller}!`
             );
             break;
+          case "reject":
+            updated = await api.rejectEscrow(selectedEscrow.id, data);
+            showNotification("Item rejected. Please ship it back.", "warning");
+            break;
+          case "returnShip":
+            updated = await api.returnShipEscrow(selectedEscrow.id, data);
+            showNotification("Return shipped! Awaiting seller confirmation.");
+            break;
+          case "refund":
+            updated = await api.refundEscrow(selectedEscrow.id);
+            showNotification(
+              `${formatBTC(selectedEscrow.amount)} refunded to buyer.`
+            );
+            break;
           case "dispute":
             updated = await api.disputeEscrow(selectedEscrow.id, data);
-            showNotification("Dispute opened. Awaiting arbiter.", "warning");
+            showNotification("Dispute opened. Awaiting admin resolution.", "warning");
             break;
           default:
             return;
@@ -241,6 +277,7 @@ export default function App() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div
+            onClick={() => { setView("wallet"); setSelectedEscrow(null); }}
             style={{
               padding: "6px 14px",
               borderRadius: 8,
@@ -248,6 +285,8 @@ export default function App() {
               display: "flex",
               alignItems: "center",
               gap: 6,
+              cursor: "pointer",
+              transition: "all 0.2s",
             }}
           >
             <Icons.Wallet />
@@ -278,8 +317,8 @@ export default function App() {
                 width: 26,
                 height: 26,
                 borderRadius: "50%",
-                background: palette.accent + "22",
-                color: palette.accent,
+                background: auth.isAdmin ? palette.red + "22" : palette.accent + "22",
+                color: auth.isAdmin ? palette.red : palette.accent,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -293,6 +332,20 @@ export default function App() {
             <span style={{ fontSize: 13, fontWeight: 600 }}>
               {auth.user.username}
             </span>
+            {auth.isAdmin && (
+              <span
+                style={{
+                  fontSize: 9,
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  background: palette.red + "18",
+                  color: palette.red,
+                  fontWeight: 700,
+                }}
+              >
+                ADMIN
+              </span>
+            )}
           </div>
 
           <Button
@@ -323,6 +376,8 @@ export default function App() {
               setSelectedEscrow(e);
               setView("detail");
             }}
+            onOpenAdmin={auth.isAdmin ? () => setView("admin") : undefined}
+            onOpenWallet={() => setView("wallet")}
           />
         )}
         {view === "create" && (
@@ -344,6 +399,24 @@ export default function App() {
             onBack={() => {
               setView("dashboard");
               setSelectedEscrow(null);
+              fetchEscrows();
+            }}
+          />
+        )}
+        {view === "wallet" && (
+          <WalletPanel
+            currentUser={auth.user}
+            onBack={() => {
+              setView("dashboard");
+              auth.refreshBalance();
+            }}
+          />
+        )}
+        {view === "admin" && auth.isAdmin && (
+          <AdminPanel
+            onBack={() => {
+              setView("dashboard");
+              fetchEscrows();
             }}
           />
         )}

@@ -31,6 +31,8 @@ const createEscrowSchema = z.object({
   sellerUsername: z.string().min(1, 'Seller username is required'),
   description: z.string().max(500, 'Description must be at most 500 characters').optional().default(''),
   expiresInDays: z.number({ coerce: true }).int().min(1).max(90).optional().default(14),
+  category: z.enum(['domains', 'vehicles', 'electronics', 'merchandise', 'services', 'crypto']).optional(),
+  inspectionDays: z.number({ coerce: true }).int().min(1).max(30).optional().default(3),
 });
 
 const fundEscrowSchema = z.object({}).passthrough();
@@ -38,6 +40,22 @@ const fundEscrowSchema = z.object({}).passthrough();
 const deliverSchema = z.object({
   trackingInfo: z.string().optional(),
   notes: z.string().max(500, 'Notes must be at most 500 characters').optional(),
+});
+
+const shipSchema = z.object({
+  trackingInfo: z.string().min(1, 'Tracking info is required'),
+  notes: z.string().max(500, 'Notes must be at most 500 characters').optional(),
+});
+
+const rejectSchema = z.object({
+  reason: z
+    .string()
+    .min(10, 'Reason must be at least 10 characters')
+    .max(500, 'Reason must be at most 500 characters'),
+});
+
+const returnShipSchema = z.object({
+  trackingInfo: z.string().min(1, 'Return tracking info is required'),
 });
 
 const disputeSchema = z.object({
@@ -54,12 +72,43 @@ const resolveSchema = z.object({
   notes: z.string().max(500, 'Notes must be at most 500 characters').optional(),
 });
 
+const messageSchema = z.object({
+  body: z
+    .string()
+    .min(1, 'Message body is required')
+    .max(2000, 'Message must be at most 2000 characters'),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email format'),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
+});
+
+const updateRoleSchema = z.object({
+  role: z.enum(['user', 'admin'], { message: 'Role must be user or admin' }),
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
   createEscrowSchema,
   fundEscrowSchema,
   deliverSchema,
+  shipSchema,
+  rejectSchema,
+  returnShipSchema,
   disputeSchema,
   resolveSchema,
+  messageSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  updateRoleSchema,
 };

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import palette from "../styles/palette";
 import { STATUS_CONFIG } from "../utils/constants";
 import { formatBTC, formatDate, daysRemaining } from "../utils/helpers";
@@ -6,24 +7,43 @@ import Button from "./Button";
 import StatusBadge from "./StatusBadge";
 import * as Icons from "./Icons";
 
+const FILTERS = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "buying", label: "Buying" },
+  { id: "selling", label: "Selling" },
+  { id: "completed", label: "Completed" },
+];
+
+const TERMINAL = ["RELEASED", "ACCEPTED", "RESOLVED", "EXPIRED", "REFUNDED"];
+
 export default function Dashboard({
   currentUser,
   escrows,
   loading,
   onCreateNew,
   onSelectEscrow,
+  onOpenAdmin,
+  onOpenWallet,
 }) {
+  const [filter, setFilter] = useState("all");
+
   const myEscrows = escrows.filter(
     (e) =>
       e.buyer === currentUser.username || e.seller === currentUser.username
   );
-  const activeCount = myEscrows.filter(
-    (e) => !["RELEASED", "RESOLVED", "EXPIRED"].includes(e.status)
-  ).length;
+
+  const filtered = myEscrows.filter((e) => {
+    if (filter === "active") return !TERMINAL.includes(e.status);
+    if (filter === "buying") return e.buyer === currentUser.username;
+    if (filter === "selling") return e.seller === currentUser.username;
+    if (filter === "completed") return TERMINAL.includes(e.status);
+    return true;
+  });
+
+  const activeCount = myEscrows.filter((e) => !TERMINAL.includes(e.status)).length;
   const totalVolume = myEscrows.reduce((sum, e) => sum + e.amount, 0);
-  const completedCount = myEscrows.filter(
-    (e) => e.status === "RELEASED"
-  ).length;
+  const completedCount = myEscrows.filter((e) => ["RELEASED", "ACCEPTED"].includes(e.status)).length;
 
   const stats = [
     {
@@ -31,6 +51,8 @@ export default function Dashboard({
       value: formatBTC(currentUser.walletBalance),
       color: palette.accent,
       icon: <Icons.Wallet />,
+      clickable: !!onOpenWallet,
+      onClick: onOpenWallet,
     },
     {
       label: "Active",
@@ -67,7 +89,11 @@ export default function Dashboard({
           <Card
             key={i}
             animate
-            style={{ animationDelay: `${i * 0.08}s` }}
+            onClick={s.onClick}
+            style={{
+              animationDelay: `${i * 0.08}s`,
+              cursor: s.clickable ? "pointer" : "default",
+            }}
           >
             <div
               style={{
@@ -118,9 +144,61 @@ export default function Dashboard({
         <h2 style={{ fontSize: 18, fontWeight: 700, color: palette.text }}>
           Your Escrows
         </h2>
-        <Button onClick={onCreateNew}>
-          <Icons.Plus /> New Escrow
-        </Button>
+        <div style={{ display: "flex", gap: 10 }}>
+          {currentUser.role === "admin" && onOpenAdmin && (
+            <Button variant="secondary" onClick={onOpenAdmin}>
+              <Icons.Shield /> Admin
+            </Button>
+          )}
+          <Button onClick={onCreateNew}>
+            <Icons.Plus /> New Escrow
+          </Button>
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 16,
+        }}
+      >
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: "'Outfit', sans-serif",
+              border: `1px solid ${filter === f.id ? palette.accent : palette.border}`,
+              background: filter === f.id ? palette.accent + "14" : "transparent",
+              color: filter === f.id ? palette.accent : palette.textMuted,
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            {f.label}
+            {f.id === "active" && activeCount > 0 && (
+              <span
+                style={{
+                  marginLeft: 6,
+                  fontSize: 10,
+                  padding: "1px 5px",
+                  borderRadius: 4,
+                  background: palette.blue + "22",
+                  color: palette.blue,
+                  fontWeight: 700,
+                }}
+              >
+                {activeCount}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Escrow List */}
@@ -138,18 +216,20 @@ export default function Dashboard({
             }}
           />
         </Card>
-      ) : myEscrows.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card style={{ textAlign: "center", padding: 48 }}>
           <div style={{ color: palette.textDim, marginBottom: 8 }}>
             <Icons.Shield />
           </div>
           <p style={{ color: palette.textMuted, fontSize: 14 }}>
-            No escrows yet. Create your first one!
+            {filter === "all"
+              ? "No escrows yet. Create your first one!"
+              : `No ${filter} escrows found.`}
           </p>
         </Card>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {myEscrows.map((e, i) => (
+          {filtered.map((e, i) => (
             <Card
               key={e.id}
               onClick={() => onSelectEscrow(e)}
@@ -197,6 +277,20 @@ export default function Dashboard({
                       {e.title}
                     </span>
                     <StatusBadge status={e.status} />
+                    {e.category && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          background: palette.surfaceAlt,
+                          color: palette.textDim,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {e.category}
+                      </span>
+                    )}
                   </div>
                   <div
                     style={{
@@ -221,9 +315,7 @@ export default function Dashboard({
                     </span>
                     <span>&middot;</span>
                     <span>{formatDate(e.createdAt)}</span>
-                    {!["RELEASED", "RESOLVED", "EXPIRED"].includes(
-                      e.status
-                    ) && (
+                    {!TERMINAL.includes(e.status) && (
                       <>
                         <span>&middot;</span>
                         <span

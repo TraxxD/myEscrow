@@ -1,11 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const db = require('../config/db');
 const { authenticate, generateTokens, verifyRefreshToken } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const { authLimiter } = require('../middleware/rateLimiter');
-const { registerSchema, loginSchema } = require('../utils/schemas');
+const { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } = require('../utils/schemas');
+const { logAudit } = require('../services/auditLog');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -40,6 +42,7 @@ router.post('/register', authLimiter, validate(registerSchema), async (req, res,
       email,
       password: hashedPassword,
       walletBalance: 1.0,
+      role: 'user',
       createdAt: new Date().toISOString(),
     };
 
@@ -47,6 +50,23 @@ router.post('/register', authLimiter, validate(registerSchema), async (req, res,
 
     const { accessToken, refreshToken } = generateTokens(user);
     const { password: _, ...safeUser } = user;
+
+    logAudit({
+      userId: id,
+      action: 'REGISTER',
+      resource: 'user',
+      resourceId: id,
+      details: { username, email },
+      ip: req.clientIp,
+    });
+
+    // Queue welcome email
+    db.emailQueue.enqueue({
+      to_email: email,
+      subject: 'Welcome to SecureEscrow',
+      template: 'welcome',
+      templateData: { username, loginUrl: 'http://localhost:5173/login' },
+    });
 
     logger.audit('auth', `User registered: ${username}`, { userId: id, email });
 
@@ -69,6 +89,14 @@ router.post('/login', authLimiter, validate(loginSchema), async (req, res, next)
 
     const { accessToken, refreshToken } = generateTokens(user);
     const { password: _, ...safeUser } = user;
+
+    logAudit({
+      userId: user.id,
+      action: 'LOGIN',
+      resource: 'user',
+      resourceId: user.id,
+      ip: req.clientIp,
+    });
 
     logger.audit('auth', `User logged in: ${user.username}`, { userId: user.id });
 
@@ -136,6 +164,86 @@ router.get('/me', authenticate, (req, res) => {
   }
   const { password: _, ...safeUser } = user;
   res.json({ user: safeUser });
+});
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    const user = db.users.getByEmail(email);
+
+    // Always return success (don't reveal if email exists)
+    if (!user) {
+      return res.json({ message: 'If the email exists, a reset link has been sent' });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiry = new Date(Date.now() + 3600000).toISOString(); // 1 hour
+
+    db.users.setResetToken(user.id, resetToken, expiry);
+
+    // Queue password reset email
+    db.emailQueue.enqueue({
+      to_email: email,
+      subject: 'Password Reset Request',
+      template: 'passwordReset',
+      templateData: { username: user.username, resetToken },
+    });
+
+    logAudit({
+      userId: user.id,
+      action: 'FORGOT_PASSWORD',
+      resource: 'user',
+      resourceId: user.id,
+      ip: req.clientIp,
+    });
+
+    logger.info('auth', `Password reset requested for: ${user.username}`);
+
+    res.json({ message: 'If the email exists, a reset link has been sent' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', authLimiter, validate(resetPasswordSchema), async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+
+    const user = db.users.getByResetToken(token);
+    if (!user) {
+      return res.status(400).json({
+        error: { code: 'INVALID_TOKEN', message: 'Invalid or expired reset token', status: 400 },
+      });
+    }
+
+    // Check expiry
+    if (new Date(user.resetTokenExpiry) < new Date()) {
+      db.users.clearResetToken(user.id);
+      return res.status(400).json({
+        error: { code: 'EXPIRED_TOKEN', message: 'Reset token has expired', status: 400 },
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    db.raw.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, user.id);
+    db.users.clearResetToken(user.id);
+
+    logAudit({
+      userId: user.id,
+      action: 'RESET_PASSWORD',
+      resource: 'user',
+      resourceId: user.id,
+      ip: req.clientIp,
+    });
+
+    logger.audit('auth', `Password reset completed for: ${user.username}`);
+
+    res.json({ message: 'Password has been reset successfully' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;

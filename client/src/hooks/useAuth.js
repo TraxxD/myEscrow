@@ -23,6 +23,7 @@ export default function useAuth() {
           id: payload.id,
           username: payload.username,
           email: payload.email,
+          role: payload.role || 'user',
           walletBalance: data.balance,
         });
       })
@@ -38,7 +39,7 @@ export default function useAuth() {
     setLoading(true);
     try {
       const data = await api.login(email, password);
-      setUser(data.user);
+      setUser({ ...data.user, role: data.user.role || 'user' });
       return data.user;
     } catch (err) {
       setError(err.message);
@@ -53,7 +54,7 @@ export default function useAuth() {
     setLoading(true);
     try {
       const data = await api.register(username, email, password);
-      setUser(data.user);
+      setUser({ ...data.user, role: data.user.role || 'user' });
       return data.user;
     } catch (err) {
       setError(err.message);
@@ -75,13 +76,13 @@ export default function useAuth() {
     setLoading(true);
     try {
       const data = await api.register(username, email, password);
-      setUser(data.user);
+      setUser({ ...data.user, role: data.user.role || 'user' });
       return data.user;
     } catch (regErr) {
       // Already registered — try login instead
       try {
         const data = await api.login(email, password);
-        setUser(data.user);
+        setUser({ ...data.user, role: data.user.role || 'user' });
         return data.user;
       } catch (loginErr) {
         setError(loginErr.message);
@@ -101,5 +102,7 @@ export default function useAuth() {
     }
   }, []);
 
-  return { user, loading, initializing, error, login, register, logout, demoLogin, refreshBalance, setError };
+  const isAdmin = user?.role === 'admin';
+
+  return { user, loading, initializing, error, login, register, logout, demoLogin, refreshBalance, setError, isAdmin };
 }

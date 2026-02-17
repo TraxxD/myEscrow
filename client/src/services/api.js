@@ -71,6 +71,20 @@ export async function register(username, email, password) {
   return data;
 }
 
+export async function forgotPassword(email) {
+  return request('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token, password) {
+  return request('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  });
+}
+
 // --- Escrows ---
 export async function getEscrows(filters) {
   const params = new URLSearchParams();
@@ -91,8 +105,19 @@ export async function createEscrow(data) {
   });
 }
 
+export async function agreeEscrow(id) {
+  return request(`/escrows/${id}/agree`, { method: 'POST' });
+}
+
 export async function fundEscrow(id) {
   return request(`/escrows/${id}/fund`, { method: 'POST' });
+}
+
+export async function shipEscrow(id, data) {
+  return request(`/escrows/${id}/ship`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function deliverEscrow(id, data) {
@@ -100,6 +125,32 @@ export async function deliverEscrow(id, data) {
     method: 'POST',
     body: JSON.stringify(data || {}),
   });
+}
+
+export async function receiveEscrow(id) {
+  return request(`/escrows/${id}/receive`, { method: 'POST' });
+}
+
+export async function acceptEscrow(id) {
+  return request(`/escrows/${id}/accept`, { method: 'POST' });
+}
+
+export async function rejectEscrow(id, data) {
+  return request(`/escrows/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function returnShipEscrow(id, data) {
+  return request(`/escrows/${id}/return-ship`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function refundEscrow(id) {
+  return request(`/escrows/${id}/refund`, { method: 'POST' });
 }
 
 export async function releaseEscrow(id) {
@@ -120,6 +171,18 @@ export async function resolveEscrow(id, data) {
   });
 }
 
+// --- Messages ---
+export async function getMessages(escrowId) {
+  return request(`/escrows/${escrowId}/messages`);
+}
+
+export async function sendMessage(escrowId, body) {
+  return request(`/escrows/${escrowId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+}
+
 // --- Wallet ---
 export async function getWalletBalance() {
   return request('/wallet/balance');
@@ -127,4 +190,49 @@ export async function getWalletBalance() {
 
 export async function getWalletTransactions() {
   return request('/wallet/transactions');
+}
+
+export async function getEscrowBalance(escrowId) {
+  return request(`/wallet/escrow-balance/${escrowId}`);
+}
+
+// --- Admin ---
+export async function getAdminStats() {
+  return request('/admin/stats');
+}
+
+export async function getAdminDisputes() {
+  return request('/admin/disputes');
+}
+
+export async function getAdminUsers(page = 1) {
+  return request(`/admin/users?page=${page}`);
+}
+
+export async function changeUserRole(userId, role) {
+  return request(`/admin/users/${userId}/role`, {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function resolveDispute(escrowId, data) {
+  return request(`/admin/disputes/${escrowId}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getAdminFees() {
+  return request('/admin/fees');
+}
+
+export async function getAdminAuditLog(limit = 50, offset = 0) {
+  return request(`/admin/audit-log?limit=${limit}&offset=${offset}`);
+}
+
+export async function getAdminEscrows(page = 1, status = '') {
+  const params = new URLSearchParams({ page });
+  if (status) params.set('status', status);
+  return request(`/admin/escrows?${params}`);
 }
