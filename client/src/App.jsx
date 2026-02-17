@@ -13,6 +13,12 @@ import * as Icons from "./components/Icons";
 export default function App() {
   const auth = useAuth();
   const [escrows, setEscrows] = useState([]);
+
+  // Scroll to top on page load/refresh
+  useEffect(() => {
+    window.history.scrollRestoration = "manual";
+    window.scrollTo(0, 0);
+  }, []);
   const [view, setView] = useState("dashboard");
   const [selectedEscrow, setSelectedEscrow] = useState(null);
   const [notification, setNotification] = useState(null);
