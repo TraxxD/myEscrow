@@ -110,8 +110,8 @@ export default function App() {
     }
   };
 
-  // Show loading spinner while checking auth on mount
-  if (auth.loading && !auth.user) {
+  // Show loading spinner only during initial token validation on mount
+  if (auth.initializing) {
     return (
       <div
         style={{

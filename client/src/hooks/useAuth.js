@@ -3,14 +3,15 @@ import * as api from '../services/api';
 
 export default function useAuth() {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState(null);
 
   // On mount: check for existing token and validate it
   useEffect(() => {
     const token = api.getToken();
     if (!token) {
-      setLoading(false);
+      setInitializing(false);
       return;
     }
 
@@ -29,7 +30,7 @@ export default function useAuth() {
         // Token invalid or expired
         api.clearToken();
       })
-      .finally(() => setLoading(false));
+      .finally(() => setInitializing(false));
   }, []);
 
   const login = useCallback(async (email, password) => {
@@ -100,5 +101,5 @@ export default function useAuth() {
     }
   }, []);
 
-  return { user, loading, error, login, register, logout, demoLogin, refreshBalance, setError };
+  return { user, loading, initializing, error, login, register, logout, demoLogin, refreshBalance, setError };
 }
