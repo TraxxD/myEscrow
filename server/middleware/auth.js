@@ -2,10 +2,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../config/db');
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required');
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 
 function authenticate(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
@@ -19,7 +16,7 @@ function authenticate(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
 
     // Check if token has been blacklisted (logout)
-    if (decoded.jti && db.tokenBlacklist.has(decoded.jti)) {
+    if (decoded.jti && db.tokens.isBlacklisted(decoded.jti)) {
       return res.status(401).json({
         error: { code: 'UNAUTHORIZED', message: 'Token revoked', status: 401 },
       });
@@ -58,7 +55,7 @@ function verifyRefreshToken(token) {
   if (decoded.type !== 'refresh') {
     throw new Error('Not a refresh token');
   }
-  if (db.tokenBlacklist.has(decoded.jti)) {
+  if (db.tokens.isBlacklisted(decoded.jti)) {
     throw new Error('Token revoked');
   }
   return decoded;

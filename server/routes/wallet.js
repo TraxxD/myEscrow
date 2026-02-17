@@ -8,7 +8,7 @@ const router = express.Router();
 // GET /api/wallet/balance
 router.get('/balance', authenticate, (req, res, next) => {
   try {
-    const user = db.users.get(req.user.id);
+    const user = db.users.getById(req.user.id);
     if (!user) {
       return res.status(404).json({
         error: { code: 'USER_NOT_FOUND', message: 'User not found', status: 404 },
@@ -26,9 +26,7 @@ router.get('/balance', authenticate, (req, res, next) => {
 // GET /api/wallet/transactions
 router.get('/transactions', authenticate, (req, res, next) => {
   try {
-    const userEscrows = [...db.escrows.values()].filter(
-      e => e.buyerId === req.user.id || e.sellerId === req.user.id
-    );
+    const userEscrows = db.escrows.getForUser(req.user.id);
 
     const transactions = [];
     for (const escrow of userEscrows) {

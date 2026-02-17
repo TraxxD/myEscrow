@@ -16,7 +16,7 @@ router.post('/register', authLimiter, validate(registerSchema), async (req, res,
     const { username, email, password } = req.body;
 
     // Check for existing email
-    const existing = [...db.users.values()].find(u => u.email === email);
+    const existing = db.users.getByEmail(email);
     if (existing) {
       return res.status(400).json({
         error: { code: 'VALIDATION_ERROR', message: 'Email already registered', status: 400 },
@@ -24,7 +24,7 @@ router.post('/register', authLimiter, validate(registerSchema), async (req, res,
     }
 
     // Check for existing username
-    const existingUsername = [...db.users.values()].find(u => u.username === username);
+    const existingUsername = db.users.getByUsername(username);
     if (existingUsername) {
       return res.status(400).json({
         error: { code: 'VALIDATION_ERROR', message: 'Username already taken', status: 400 },
@@ -39,11 +39,11 @@ router.post('/register', authLimiter, validate(registerSchema), async (req, res,
       username,
       email,
       password: hashedPassword,
-      walletBalance: 1.0, // Start with demo BTC
+      walletBalance: 1.0,
       createdAt: new Date().toISOString(),
     };
 
-    db.users.set(id, user);
+    db.users.create(user);
 
     const { accessToken, refreshToken } = generateTokens(user);
     const { password: _, ...safeUser } = user;
@@ -60,7 +60,7 @@ router.post('/register', authLimiter, validate(registerSchema), async (req, res,
 router.post('/login', authLimiter, validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    const user = [...db.users.values()].find(u => u.email === email);
+    const user = db.users.getByEmail(email);
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({
         error: { code: 'UNAUTHORIZED', message: 'Invalid credentials', status: 401 },
@@ -89,7 +89,7 @@ router.post('/refresh', (req, res, next) => {
     }
 
     const decoded = verifyRefreshToken(refreshToken);
-    const user = db.users.get(decoded.id);
+    const user = db.users.getById(decoded.id);
     if (!user) {
       return res.status(401).json({
         error: { code: 'UNAUTHORIZED', message: 'User not found', status: 401 },
@@ -99,7 +99,7 @@ router.post('/refresh', (req, res, next) => {
     const tokens = generateTokens(user);
 
     // Blacklist the old refresh token
-    db.tokenBlacklist.add(decoded.jti);
+    db.tokens.blacklist(decoded.jti);
 
     logger.info('auth', `Token refreshed for: ${user.username}`, { userId: user.id });
 
@@ -117,7 +117,7 @@ router.post('/logout', (req, res) => {
   if (refreshToken) {
     try {
       const decoded = verifyRefreshToken(refreshToken);
-      db.tokenBlacklist.add(decoded.jti);
+      db.tokens.blacklist(decoded.jti);
       logger.audit('auth', `User logged out`, { userId: decoded.id });
     } catch {
       // Token already invalid — that's fine, still return success
@@ -128,7 +128,7 @@ router.post('/logout', (req, res) => {
 
 // GET /api/auth/me
 router.get('/me', authenticate, (req, res) => {
-  const user = db.users.get(req.user.id);
+  const user = db.users.getById(req.user.id);
   if (!user) {
     return res.status(404).json({
       error: { code: 'USER_NOT_FOUND', message: 'User not found', status: 404 },

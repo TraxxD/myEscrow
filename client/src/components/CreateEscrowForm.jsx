@@ -10,8 +10,11 @@ export default function CreateEscrowForm({
   currentUser,
   onSubmit,
   onCancel,
+  initialCategory,
 }) {
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(
+    initialCategory ? `${initialCategory} Transaction` : ""
+  );
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [seller, setSeller] = useState("");
@@ -57,6 +60,20 @@ export default function CreateEscrowForm({
         <h2 style={{ fontSize: 22, fontWeight: 700, color: palette.text }}>
           New Escrow
         </h2>
+        {initialCategory && (
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: palette.accent,
+              background: palette.accent + "14",
+              padding: "4px 10px",
+              borderRadius: 6,
+            }}
+          >
+            {initialCategory}
+          </span>
+        )}
       </div>
 
       <Card>

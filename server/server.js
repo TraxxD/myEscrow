@@ -66,12 +66,12 @@ async function seedDemoAccounts() {
   ];
 
   for (const demo of demos) {
-    const exists = [...db.users.values()].find(u => u.email === demo.email);
+    const exists = db.users.getByEmail(demo.email);
     if (exists) continue;
 
     const id = `usr_${uuidv4().slice(0, 8)}`;
     const hashedPassword = await bcrypt.hash(demo.password, 10);
-    db.users.set(id, {
+    db.users.create({
       id,
       username: demo.username,
       email: demo.email,

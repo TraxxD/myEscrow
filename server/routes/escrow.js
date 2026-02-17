@@ -20,7 +20,7 @@ router.post('/', authenticate, validate(createEscrowSchema), (req, res, next) =>
   try {
     const { title, description, amount, sellerUsername, expiresInDays } = req.body;
 
-    const seller = [...db.users.values()].find(u => u.username === sellerUsername);
+    const seller = db.users.getByUsername(sellerUsername);
     if (!seller) {
       return res.status(404).json({
         error: { code: 'USER_NOT_FOUND', message: 'Seller not found', status: 404 },
@@ -50,7 +50,7 @@ router.post('/', authenticate, validate(createEscrowSchema), (req, res, next) =>
       history: [{ action: 'CREATED', by: req.user.username, at: new Date().toISOString() }],
     };
 
-    db.escrows.set(escrow.id, escrow);
+    db.escrows.create(escrow);
 
     logger.audit('escrow', `Escrow created: ${escrow.id}`, {
       buyer: req.user.username, seller: sellerUsername, amount,
@@ -66,18 +66,7 @@ router.post('/', authenticate, validate(createEscrowSchema), (req, res, next) =>
 router.get('/', authenticate, (req, res, next) => {
   try {
     const { status, role, page = 1, limit = 20 } = req.query;
-    let escrows = [...db.escrows.values()].filter(
-      e => e.buyerId === req.user.id || e.sellerId === req.user.id
-    );
-
-    if (status) {
-      escrows = escrows.filter(e => e.status === status);
-    }
-    if (role === 'buyer') {
-      escrows = escrows.filter(e => e.buyerId === req.user.id);
-    } else if (role === 'seller') {
-      escrows = escrows.filter(e => e.sellerId === req.user.id);
-    }
+    const escrows = db.escrows.getForUser(req.user.id, { status, role });
 
     const start = (page - 1) * limit;
     res.json(escrows.slice(start, start + parseInt(limit)));
@@ -89,7 +78,7 @@ router.get('/', authenticate, (req, res, next) => {
 // GET /api/escrows/:id — Get escrow details
 router.get('/:id', authenticate, (req, res, next) => {
   try {
-    const escrow = db.escrows.get(req.params.id);
+    const escrow = db.escrows.getById(req.params.id);
     if (!escrow) {
       return res.status(404).json({
         error: { code: 'ESCROW_NOT_FOUND', message: `Escrow ${req.params.id} not found`, status: 404 },
@@ -104,7 +93,7 @@ router.get('/:id', authenticate, (req, res, next) => {
 // POST /api/escrows/:id/fund — Buyer deposits BTC
 router.post('/:id/fund', authenticate, validate(fundEscrowSchema), (req, res, next) => {
   try {
-    const escrow = db.escrows.get(req.params.id);
+    const escrow = db.escrows.getById(req.params.id);
     if (!escrow) {
       return res.status(404).json({ error: { code: 'ESCROW_NOT_FOUND', status: 404 } });
     }
@@ -119,18 +108,22 @@ router.post('/:id/fund', authenticate, validate(fundEscrowSchema), (req, res, ne
       });
     }
 
-    const buyer = db.users.get(req.user.id);
+    const buyer = db.users.getById(req.user.id);
     if (buyer.walletBalance < escrow.amount) {
       return res.status(400).json({
         error: { code: 'INSUFFICIENT_FUNDS', message: 'Insufficient wallet balance', status: 400 },
       });
     }
 
-    buyer.walletBalance -= escrow.amount;
+    // Deduct from buyer
+    db.users.updateBalance(buyer.id, buyer.walletBalance - escrow.amount);
+
+    // Update escrow
     escrow.status = 'FUNDED';
     escrow.fundedAt = new Date().toISOString();
     escrow.txHash = `tx_${uuidv4().replace(/-/g, '')}`;
     escrow.history.push({ action: 'FUNDED', by: req.user.username, at: escrow.fundedAt });
+    db.escrows.update(escrow);
 
     logger.audit('escrow', `Escrow funded: ${escrow.id}`, {
       buyer: req.user.username, amount: escrow.amount,
@@ -145,7 +138,7 @@ router.post('/:id/fund', authenticate, validate(fundEscrowSchema), (req, res, ne
 // POST /api/escrows/:id/deliver — Seller marks as delivered
 router.post('/:id/deliver', authenticate, validate(deliverSchema), (req, res, next) => {
   try {
-    const escrow = db.escrows.get(req.params.id);
+    const escrow = db.escrows.getById(req.params.id);
     if (!escrow) {
       return res.status(404).json({ error: { code: 'ESCROW_NOT_FOUND', status: 404 } });
     }
@@ -165,6 +158,7 @@ router.post('/:id/deliver', authenticate, validate(deliverSchema), (req, res, ne
     escrow.trackingInfo = req.body.trackingInfo || null;
     escrow.deliveryNotes = req.body.notes || null;
     escrow.history.push({ action: 'DELIVERED', by: req.user.username, at: escrow.deliveredAt });
+    db.escrows.update(escrow);
 
     logger.audit('escrow', `Escrow delivered: ${escrow.id}`, {
       seller: req.user.username,
@@ -179,7 +173,7 @@ router.post('/:id/deliver', authenticate, validate(deliverSchema), (req, res, ne
 // POST /api/escrows/:id/release — Buyer confirms receipt
 router.post('/:id/release', authenticate, (req, res, next) => {
   try {
-    const escrow = db.escrows.get(req.params.id);
+    const escrow = db.escrows.getById(req.params.id);
     if (!escrow) {
       return res.status(404).json({ error: { code: 'ESCROW_NOT_FOUND', status: 404 } });
     }
@@ -194,12 +188,14 @@ router.post('/:id/release', authenticate, (req, res, next) => {
       });
     }
 
-    const seller = [...db.users.values()].find(u => u.username === escrow.seller);
-    seller.walletBalance += escrow.amount * 0.98; // 2% service fee
+    // Credit seller (minus 2% fee)
+    const seller = db.users.getByUsername(escrow.seller);
+    db.users.updateBalance(seller.id, seller.walletBalance + escrow.amount * 0.98);
 
     escrow.status = 'RELEASED';
     escrow.releasedAt = new Date().toISOString();
     escrow.history.push({ action: 'RELEASED', by: req.user.username, at: escrow.releasedAt });
+    db.escrows.update(escrow);
 
     logger.audit('escrow', `Escrow released: ${escrow.id}`, {
       buyer: req.user.username, seller: escrow.seller, amount: escrow.amount,
@@ -214,7 +210,7 @@ router.post('/:id/release', authenticate, (req, res, next) => {
 // POST /api/escrows/:id/dispute — Open a dispute
 router.post('/:id/dispute', authenticate, validate(disputeSchema), (req, res, next) => {
   try {
-    const escrow = db.escrows.get(req.params.id);
+    const escrow = db.escrows.getById(req.params.id);
     if (!escrow) {
       return res.status(404).json({ error: { code: 'ESCROW_NOT_FOUND', status: 404 } });
     }
@@ -237,6 +233,7 @@ router.post('/:id/dispute', authenticate, validate(disputeSchema), (req, res, ne
       openedAt: new Date().toISOString(),
     };
     escrow.history.push({ action: 'DISPUTED', by: req.user.username, at: escrow.dispute.openedAt });
+    db.escrows.update(escrow);
 
     logger.audit('escrow', `Escrow disputed: ${escrow.id}`, {
       by: req.user.username, reason: req.body.reason,
@@ -251,7 +248,7 @@ router.post('/:id/dispute', authenticate, validate(disputeSchema), (req, res, ne
 // POST /api/escrows/:id/resolve — Arbiter resolves dispute
 router.post('/:id/resolve', authenticate, strictLimiter, validate(resolveSchema), (req, res, next) => {
   try {
-    const escrow = db.escrows.get(req.params.id);
+    const escrow = db.escrows.getById(req.params.id);
     if (!escrow) {
       return res.status(404).json({ error: { code: 'ESCROW_NOT_FOUND', status: 404 } });
     }
@@ -263,12 +260,12 @@ router.post('/:id/resolve', authenticate, strictLimiter, validate(resolveSchema)
 
     const { ruling, splitPercentage, notes } = req.body;
 
-    const recipient =
-      ruling === 'BUYER'
-        ? db.users.get(escrow.buyerId)
-        : [...db.users.values()].find(u => u.username === escrow.seller);
+    const recipient = ruling === 'BUYER'
+      ? db.users.getById(escrow.buyerId)
+      : db.users.getByUsername(escrow.seller);
 
-    recipient.walletBalance += escrow.amount * (splitPercentage / 100) * 0.97; // 3% dispute fee
+    // Credit recipient (minus 3% dispute fee)
+    db.users.updateBalance(recipient.id, recipient.walletBalance + escrow.amount * (splitPercentage / 100) * 0.97);
 
     escrow.status = 'RESOLVED';
     escrow.resolution = {
@@ -278,6 +275,7 @@ router.post('/:id/resolve', authenticate, strictLimiter, validate(resolveSchema)
       resolvedAt: new Date().toISOString(),
     };
     escrow.history.push({ action: 'RESOLVED', by: 'arbiter', at: escrow.resolution.resolvedAt });
+    db.escrows.update(escrow);
 
     logger.audit('escrow', `Escrow resolved: ${escrow.id}`, {
       ruling, splitPercentage, amount: escrow.amount,

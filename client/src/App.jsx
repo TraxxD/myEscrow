@@ -23,6 +23,7 @@ export default function App() {
   const [selectedEscrow, setSelectedEscrow] = useState(null);
   const [notification, setNotification] = useState(null);
   const [loadingEscrows, setLoadingEscrows] = useState(false);
+  const [pendingCategory, setPendingCategory] = useState(null);
 
   const showNotification = useCallback((msg, type = "success") => {
     setNotification({ msg, type });
@@ -45,8 +46,12 @@ export default function App() {
   useEffect(() => {
     if (auth.user) {
       fetchEscrows();
+      // If user selected a category before login, go to create form
+      if (pendingCategory) {
+        setView("create");
+      }
     }
-  }, [auth.user, fetchEscrows]);
+  }, [auth.user, fetchEscrows, pendingCategory]);
 
   const handleCreateEscrow = async (formData) => {
     try {
@@ -59,6 +64,7 @@ export default function App() {
       });
       setEscrows((prev) => [newEscrow, ...prev]);
       setView("dashboard");
+      setPendingCategory(null);
       showNotification("Escrow created successfully!");
     } catch (err) {
       showNotification(err.message, "error");
@@ -148,6 +154,7 @@ export default function App() {
       <LoginScreen
         onLogin={handleLogin}
         onDemoLogin={auth.demoLogin}
+        onCategorySelect={setPendingCategory}
         loading={auth.loading}
         error={auth.error}
       />
@@ -296,6 +303,7 @@ export default function App() {
               setEscrows([]);
               setView("dashboard");
               setSelectedEscrow(null);
+              setPendingCategory(null);
             }}
           >
             Logout
@@ -321,7 +329,11 @@ export default function App() {
           <CreateEscrowForm
             currentUser={auth.user}
             onSubmit={handleCreateEscrow}
-            onCancel={() => setView("dashboard")}
+            onCancel={() => {
+              setView("dashboard");
+              setPendingCategory(null);
+            }}
+            initialCategory={pendingCategory}
           />
         )}
         {view === "detail" && selectedEscrow && (
