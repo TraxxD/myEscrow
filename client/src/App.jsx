@@ -222,7 +222,7 @@ export default function App() {
               letterSpacing: "-0.5px",
             }}
           >
-            BTC<span style={{ color: palette.accent }}>Escrow</span>
+            my<span style={{ color: palette.accent }}>Escrow</span>
           </span>
         </div>
 

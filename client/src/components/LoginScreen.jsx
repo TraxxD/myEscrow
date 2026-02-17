@@ -89,7 +89,7 @@ export default function LoginScreen({ onLogin, onDemoLogin, loading, error }) {
             marginBottom: 4,
           }}
         >
-          BTC <span style={{ color: palette.accent }}>Escrow</span>
+          my<span style={{ color: palette.accent }}>Escrow</span>
         </h1>
         <p
           style={{
